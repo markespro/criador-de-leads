@@ -1,0 +1,17 @@
+# Credenciais
+.env
+
+# Dados gerados
+leads_prospeccao.csv
+*.log
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Claude
+.claude/

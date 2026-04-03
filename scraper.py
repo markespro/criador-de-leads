@@ -17,6 +17,9 @@ from typing import Optional
 import urllib.request
 import urllib.error
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
@@ -126,7 +129,7 @@ def inicializar_csv():
         log.info(f"Arquivo {OUTPUT_FILE} criado.")
 
 
-N8N_WEBHOOK_URL = "https://seu-n8n.com/webhook/SEU_ID/webhook/leads-scraper"
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
 
 
 def enviar_para_n8n(lead: dict):
