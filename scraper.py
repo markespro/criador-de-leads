@@ -129,6 +129,15 @@ def inicializar_csv():
         log.info(f"Arquivo {OUTPUT_FILE} criado.")
 
 
+def telefones_ja_salvos() -> set:
+    """Retorna o conjunto de telefones já presentes no CSV."""
+    if not Path(OUTPUT_FILE).exists():
+        return set()
+    with open(OUTPUT_FILE, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        return {row["telefone"] for row in reader if row.get("telefone")}
+
+
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
 
 
@@ -149,12 +158,18 @@ def enviar_para_n8n(lead: dict):
         log.warning(f"  n8n webhook falhou: {exc}")
 
 
-def salvar_lead(lead: dict):
-    """Salva um lead no CSV de forma incremental (append) e envia ao n8n."""
+def salvar_lead(lead: dict, telefones_vistos: set) -> bool:
+    """Salva um lead no CSV se o telefone ainda não foi registrado. Retorna True se salvou."""
+    tel = lead.get("telefone", "")
+    if tel in telefones_vistos:
+        log.info(f"  Duplicata ignorada — {lead.get('nome_empresa')} | {tel}")
+        return False
     with open(OUTPUT_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_HEADERS)
         writer.writerow(lead)
+    telefones_vistos.add(tel)
     enviar_para_n8n(lead)
+    return True
 
 
 # ─── Scraper de Site da Empresa ──────────────────────────────────────────────
@@ -285,6 +300,7 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
     """
     inicializar_csv()
     ja_processados: set[str] = set()
+    telefones_vistos: set[str] = telefones_ja_salvos()
     total_salvos = 0
 
     async with async_playwright() as pw:
@@ -405,13 +421,12 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
                     if wa_site:
                         dados["whatsapp_link"] = wa_site
 
-                salvar_lead(dados)
+                if salvar_lead(dados, telefones_vistos):
+                    total_salvos += 1
+                    log.info(
+                        f"  SALVO — {dados['nome_empresa']} | {dados['telefone']} | WA: {dados['whatsapp_link']}"
+                    )
                 ja_processados.add(nome_preview)
-                total_salvos += 1
-
-                log.info(
-                    f"  SALVO — {dados['nome_empresa']} | {dados['telefone']} | WA: {dados['whatsapp_link']}"
-                )
 
                 await delay(1.0, 2.5)
 
@@ -435,7 +450,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "query",
         nargs="?",
-        default="loja de rodas e pneus João Pessoa",
+        default="loja de rodas e pneus premium Brasil",
         help='Busca no Maps. Ex: "barbearias Curitiba"',
     )
     parser.add_argument(
