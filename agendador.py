@@ -163,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "query",
         nargs="?",
-        default="barbearias São Paulo",
+        default="loja de rodas e pneus premium Brasil",
         help='Busca no Maps. Ex: "salões de beleza Curitiba"',
     )
     parser.add_argument(
