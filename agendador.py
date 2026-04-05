@@ -29,6 +29,16 @@ logging.basicConfig(
 # ─── Importa a função principal do scraper ───────────────────────────────────
 from scraper import scrape, inicializar_csv, OUTPUT_FILE
 
+# ─── Cidades para rotação de queries ─────────────────────────────────────────
+CIDADES = [
+    "São Paulo", "Rio de Janeiro", "Belo Horizonte", "Curitiba",
+    "Porto Alegre", "Brasília", "Salvador", "Fortaleza", "Recife",
+    "Manaus", "Belém", "Goiânia", "Florianópolis", "Campinas",
+    "Santos", "São Bernardo do Campo", "Ribeirão Preto", "Uberlândia",
+    "Niterói", "Natal", "Maceió", "Teresina", "Campo Grande",
+    "João Pessoa", "Aracaju", "Cuiabá", "Macapá", "Porto Velho",
+]
+
 
 def _contar_leads() -> int:
     p = Path(OUTPUT_FILE)
@@ -94,7 +104,7 @@ async def aguardar_ate(momento: datetime):
 # ─── Orquestrador principal ───────────────────────────────────────────────────
 
 async def orquestrar(
-    query: str,
+    nicho: str,
     meta: int,
     tamanho_lote: int,
     inicio: datetime,
@@ -102,19 +112,22 @@ async def orquestrar(
     verificar_site: bool,
 ):
     """
-    Divide a meta em lotes e os distribui aleatoriamente na janela de tempo.
-
-    Exemplo com meta=50 e lote=5:
-        → 10 lotes de 5 leads cada
-        → Distribuídos em horários aleatórios entre início e fim
+    Divide a meta em lotes distribuídos na janela de tempo.
+    Cada lote usa uma cidade diferente, ampliando o pool de resultados.
     """
-    n_lotes = -(-meta // tamanho_lote)  # Divisão com teto (ceil sem math)
+    n_lotes = -(-meta // tamanho_lote)  # ceil sem math
+    cidades_rotacao = random.sample(CIDADES, min(n_lotes, len(CIDADES)))
+    # Se precisar de mais lotes que cidades, repete embaralhado
+    while len(cidades_rotacao) < n_lotes:
+        cidades_rotacao += random.sample(CIDADES, min(n_lotes - len(cidades_rotacao), len(CIDADES)))
+
     log.info("=" * 60)
-    log.info(f"Query       : {query}")
+    log.info(f"Nicho       : {nicho}")
     log.info(f"Meta total  : {meta} leads")
     log.info(f"Tamanho lote: {tamanho_lote} leads por lote")
     log.info(f"Nº de lotes : {n_lotes}")
     log.info(f"Janela      : {inicio.strftime('%H:%M')} → {fim.strftime('%H:%M')}")
+    log.info(f"Cidades     : {', '.join(cidades_rotacao[:n_lotes])}")
     log.info("=" * 60)
 
     inicializar_csv()
@@ -125,29 +138,28 @@ async def orquestrar(
         log.error("Não foi possível gerar nenhum horário. Encerrando.")
         return
 
-    # Mostra o plano do dia antes de executar
     log.info("Plano de execução do dia:")
-    for i, h in enumerate(horarios, 1):
-        log.info(f"  Lote {i:02d} → {h.strftime('%H:%M:%S')} ({tamanho_lote} leads)")
+    for i, (h, cidade) in enumerate(zip(horarios, cidades_rotacao), 1):
+        log.info(f"  Lote {i:02d} → {h.strftime('%H:%M:%S')} | {nicho} {cidade}")
 
     total_coletado = 0
 
-    for i, horario in enumerate(horarios, 1):
+    for i, (horario, cidade) in enumerate(zip(horarios, cidades_rotacao), 1):
         leads_restantes = meta - total_coletado
         if leads_restantes <= 0:
             log.info("Meta atingida antes do último lote. Encerrando.")
             break
 
-        lote_atual = min(tamanho_lote, leads_restantes)
+        query_lote = f"{nicho} {cidade}"
 
         await aguardar_ate(horario)
 
-        log.info(f"--- Iniciando lote {i}/{len(horarios)} ({lote_atual} leads) ---")
+        log.info(f"--- Lote {i}/{n_lotes} | Query: {query_lote} ---")
 
         try:
             salvos_antes = _contar_leads()
             await scrape(
-                query=query,
+                query=query_lote,
                 max_resultados=50,
                 verificar_site=verificar_site,
             )
@@ -174,10 +186,10 @@ if __name__ == "__main__":
         description="Agendador furtivo — distribui buscas ao longo do dia"
     )
     parser.add_argument(
-        "query",
+        "nicho",
         nargs="?",
-        default="loja de rodas e pneus premium Brasil",
-        help='Busca no Maps. Ex: "salões de beleza Curitiba"',
+        default="loja de rodas e pneus",
+        help='Nicho a buscar. Ex: "salões de beleza" (cidade é adicionada automaticamente)',
     )
     parser.add_argument(
         "--meta",
@@ -225,7 +237,7 @@ if __name__ == "__main__":
 
     asyncio.run(
         orquestrar(
-            query=args.query,
+            nicho=args.nicho,
             meta=args.meta,
             tamanho_lote=args.lote,
             inicio=inicio_dt,
