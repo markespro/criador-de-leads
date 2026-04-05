@@ -396,7 +396,8 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
                 nome_preview = await item.inner_text()
                 nome_preview = nome_preview.strip().split("\n")[0]
 
-                if nome_preview in ja_processados:
+                chave = nome_preview if nome_preview else str(idx)
+                if chave in ja_processados:
                     continue
 
                 log.info(f"[{idx+1}] Processando: {nome_preview}")
@@ -410,7 +411,7 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
                     log.info(
                         f"  Ignorado (tipo: {dados['tipo_telefone']}) — {dados['nome_empresa']}"
                     )
-                    ja_processados.add(nome_preview)
+                    ja_processados.add(chave)
                     continue
 
                 # ── Verificação opcional no site ──────────────────────────
@@ -426,7 +427,7 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
                     log.info(
                         f"  SALVO — {dados['nome_empresa']} | {dados['telefone']} | WA: {dados['whatsapp_link']}"
                     )
-                ja_processados.add(nome_preview)
+                ja_processados.add(chave)
 
                 await delay(1.0, 2.5)
 
