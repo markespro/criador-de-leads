@@ -9,10 +9,12 @@ Uso:
 
 import asyncio
 import argparse
+import csv
 import logging
 import random
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 log = logging.getLogger("agendador")
 logging.basicConfig(
@@ -25,7 +27,15 @@ logging.basicConfig(
 )
 
 # ─── Importa a função principal do scraper ───────────────────────────────────
-from scraper import scrape, inicializar_csv
+from scraper import scrape, inicializar_csv, OUTPUT_FILE
+
+
+def _contar_leads() -> int:
+    p = Path(OUTPUT_FILE)
+    if not p.exists():
+        return 0
+    with open(p, newline="", encoding="utf-8") as f:
+        return sum(1 for _ in csv.reader(f)) - 1  # desconta cabeçalho
 
 
 # ─── Helpers de horário ───────────────────────────────────────────────────────
@@ -135,13 +145,16 @@ async def orquestrar(
         log.info(f"--- Iniciando lote {i}/{len(horarios)} ({lote_atual} leads) ---")
 
         try:
+            salvos_antes = _contar_leads()
             await scrape(
                 query=query,
-                max_resultados=lote_atual,
+                max_resultados=50,
                 verificar_site=verificar_site,
             )
-            total_coletado += lote_atual
-            log.info(f"Lote {i} concluído. Total acumulado: {total_coletado}/{meta}")
+            salvos_depois = _contar_leads()
+            novos = salvos_depois - salvos_antes
+            total_coletado += novos
+            log.info(f"Lote {i} concluído. Novos: {novos}. Total acumulado: {total_coletado}/{meta}")
         except Exception as exc:
             log.error(f"Erro no lote {i}: {exc}. Pulando para o próximo.")
 
