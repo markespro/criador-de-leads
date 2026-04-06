@@ -140,9 +140,20 @@ def telefones_ja_salvos() -> set:
 
 N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL", "")
 
+# Proteção Google Sheets API: máximo de 1 escrita a cada 2 segundos
+# (limite seguro muito abaixo dos 300 req/min da cota gratuita)
+_ultimo_envio: float = 0.0
+_INTERVALO_MINIMO_S: float = 2.0
+
 
 def enviar_para_n8n(lead: dict):
     """Envia o lead ao webhook do n8n (Sheets → GHL). Falha silenciosa."""
+    global _ultimo_envio
+    import time
+    espera = _INTERVALO_MINIMO_S - (time.monotonic() - _ultimo_envio)
+    if espera > 0:
+        log.debug(f"  Rate limit Sheets: aguardando {espera:.1f}s...")
+        time.sleep(espera)
     try:
         payload = json.dumps(lead).encode("utf-8")
         req = urllib.request.Request(
@@ -156,6 +167,8 @@ def enviar_para_n8n(lead: dict):
             log.info(f"  n8n: {body}")
     except urllib.error.URLError as exc:
         log.warning(f"  n8n webhook falhou: {exc}")
+    finally:
+        _ultimo_envio = time.monotonic()
 
 
 def salvar_lead(lead: dict, telefones_vistos: set) -> bool:
