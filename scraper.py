@@ -406,10 +406,20 @@ async def scrape(query: str, max_resultados: int = 120, verificar_site: bool = F
 
                 dados = await extrair_detalhes(page)
 
-                # ── Filtro principal: só celular válido ───────────────────
+                # ── Filtro 1: só celular válido ───────────────────────────
                 if dados["tipo_telefone"] != "celular":
                     log.info(
                         f"  Ignorado (tipo: {dados['tipo_telefone']}) — {dados['nome_empresa']}"
+                    )
+                    ja_processados.add(chave)
+                    continue
+
+                # ── Filtro 2: só categorias de rodas/pneus ────────────────
+                CATEGORIAS_ACEITAS = {"loja de rodas", "comércio de pneu", "comercio de pneu"}
+                cat = dados.get("categoria", "").strip().lower()
+                if cat not in CATEGORIAS_ACEITAS:
+                    log.info(
+                        f"  Ignorado (categoria: '{dados['categoria']}') — {dados['nome_empresa']}"
                     )
                     ja_processados.add(chave)
                     continue
